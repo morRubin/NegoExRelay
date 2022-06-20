@@ -1,0 +1,28 @@
+from enum import Enum
+
+class NegoExMessageType(Enum):
+    MESSAGE_TYPE_INITIATOR_NEGO = 0
+    MESSAGE_TYPE_ACCEPTOR_NEGO = 1
+    MESSAGE_TYPE_INITIATOR_META_DATA = 2
+    MESSAGE_TYPE_ACCEPTOR_META_DATA = 3
+    MESSAGE_TYPE_CHALLENGE = 4
+    MESSAGE_TYPE_AP_REQUEST = 5
+    MESSAGE_TYPE_VERIFY = 6
+    MESSAGE_TYPE_ALERT = 7
+
+
+def parse_mechToken(hexData):
+    headers = hexData.split("".join("{:02x}".format(ord(c)) for c in 'NEGOEXTS'))
+    headers = [i[:8] for i in headers if i]
+
+    # transform to big endian from little
+    headers = [bytearray.fromhex(i) for i in headers]
+    [i.reverse() for i in headers]
+    headers = [int(i.hex(), 16) for i in headers]
+    headers = [NegoExMessageType(i) for i in headers]
+    return headers
+
+
+if __name__ == '__main__':
+    data = "4e45474f45585453000000000000000060000000700000009d07b53d849dc62df150b0abe1158817bc923ecc247a00abb0fd17e3f3d41d27064e35a7c792814c61ed786b5c7155e30000000000000000600000000100000000000000000000005c33530deaf90d4db2ec4ae3786ec3084e45474f45585453020000000100000040000000d20000009d07b53d849dc62df150b0abe11588175c33530deaf90d4db2ec4ae3786ec308400000009200000030818fa05530533051804f304d314b304906035504031e42004d0053002d004f007200670061006e0069007a006100740069006f006e002d005000320050002d0041006300630065007300730020005b0032003000320032005da1363034a0111b0f57454c4c4b4e4f574e3a504b553255a11f301da003020102a11630141b04636966731b0c3137322e32332e312e313736"
+    parse_mechToken(data)
