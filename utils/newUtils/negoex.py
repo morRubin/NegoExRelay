@@ -1,4 +1,21 @@
+import ctypes
 from enum import Enum
+
+from asn1crypto import core
+from minikerberos.protocol.asn1_structs import AS_REQ as AS_REQ1
+
+from utils.newUtils.NegoExStructs import WST_EXCHANGE_MESSAGE, WST_BYTE_VECTOR, WST_MESSAGE_TYPE, WST_MESSAGE_HEADER, \
+    WST_MESSAGE_SIGNATURE
+
+
+class SPNEGO_PKINIT_REP(core.Sequence):
+    class_ = 1
+    tag = 0
+    _fields = [
+        ('kerberos-v5', core.ObjectIdentifier),
+        ('null', core.Any),
+        ('Kerberos', AS_REQ1),
+    ]
 
 class NegoExMessageType(Enum):
     MESSAGE_TYPE_INITIATOR_NEGO = 0
@@ -23,6 +40,46 @@ def parse_mechToken(hexData):
     return headers
 
 
-if __name__ == '__main__':
-    data = "4e45474f45585453000000000000000060000000700000009d07b53d849dc62df150b0abe1158817bc923ecc247a00abb0fd17e3f3d41d27064e35a7c792814c61ed786b5c7155e30000000000000000600000000100000000000000000000005c33530deaf90d4db2ec4ae3786ec3084e45474f45585453020000000100000040000000d20000009d07b53d849dc62df150b0abe11588175c33530deaf90d4db2ec4ae3786ec308400000009200000030818fa05530533051804f304d314b304906035504031e42004d0053002d004f007200670061006e0069007a006100740069006f006e002d005000320050002d0041006300630065007300730020005b0032003000320032005da1363034a0111b0f57454c4c4b4e4f574e3a504b553255a11f301da003020102a11630141b04636966731b0c3137322e32332e312e313736"
-    parse_mechToken(data)
+toHex = lambda x: "".join([hex(c)[2:].zfill(2) for c in x])
+
+
+def Pack(ctype_instance):
+    buf = toHex(ctypes.string_at(ctypes.byref(ctype_instance), ctypes.sizeof(ctype_instance)))
+    return buf
+
+
+def generateAPRequest(data, oldMessage):
+    signature = WST_MESSAGE_SIGNATURE(int.from_bytes(bytearray(oldMessage.Header.Signature), "big"))
+
+    header2 = WST_MESSAGE_HEADER(signature,
+                                 5,
+                                 oldMessage.Header.SequenceNum,
+                                 0,
+                                 0,
+                                 oldMessage.Header.ConversationId
+                                 )
+
+    exchange2 = WST_BYTE_VECTOR(64,  # should be ctypes.sizeof(header) + 8,
+                                int(len(data) / 2),
+                                0)
+
+    exchangeMsg2 = WST_EXCHANGE_MESSAGE(header2,
+                                        oldMessage.AuthScheme,
+                                        exchange2)
+
+    header = WST_MESSAGE_HEADER(signature,
+                                WST_MESSAGE_TYPE.WST_MESSAGE_TYPE_AP_REQUEST.value,
+                                oldMessage.Header.SequenceNum,
+                                ctypes.sizeof(header2) + 24,
+                                ctypes.sizeof(exchangeMsg2) + int(len(data) / 2),
+                                oldMessage.Header.ConversationId
+                                )
+
+    exchange = WST_BYTE_VECTOR(ctypes.sizeof(header) + 24,
+                               int(len(data) / 2),
+                               0)
+
+    ApRequestMsg = WST_EXCHANGE_MESSAGE(header,
+                                        oldMessage.AuthScheme,
+                                        exchange)
+    return Pack(ApRequestMsg) + data
