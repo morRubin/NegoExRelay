@@ -28,6 +28,8 @@ class NEGOEXRelayxConfig:
 
         self.listeningPort = None
 
+        self.clientName = None
+
         self.domainIp = None
 
         self.machineAccount = None
@@ -120,6 +122,9 @@ class NEGOEXRelayxConfig:
 
     def setListeningPort(self, port):
         self.listeningPort = port
+
+    def setNewClientName(self, name):
+        self.clientName = name
 
     def setRunSocks(self, socks, server):
         self.runSocks = socks

@@ -142,6 +142,7 @@ def start_servers(options, threads):
         c.setSMB2Support(options.smb2support)
         c.setInterfaceIp(options.interface_ip)
         c.setListeningPort(options.smb_port)
+        c.setNewClientName(options.clientname)
 
         s = server(c)
         s.start()
@@ -208,6 +209,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', action='store', type=str, required=False, metavar = 'COMMAND', help='Command to execute on '
                         'target system (for SMB and RPC). If not specified for SMB, hashes will be dumped (secretsdump.py must be'
                         ' in the same directory). For RPC no output will be provided.')
+    parser.add_argument('-clientname', action='store', type=str, required=False, help='A new name for the client name ')
 
     #SMB arguments
     smboptions = parser.add_argument_group("SMB client options")
@@ -238,6 +240,9 @@ if __name__ == '__main__':
     from clients import PROTOCOL_CLIENTS
     from attacks import PROTOCOL_ATTACKS
 
+    if options.clientname is not None:
+        if (len(options.clientname) > 16):
+            raise Exception("Client name cannot be larger than 16 chars")
 
     if options.codec is not None:
         codec = options.codec
